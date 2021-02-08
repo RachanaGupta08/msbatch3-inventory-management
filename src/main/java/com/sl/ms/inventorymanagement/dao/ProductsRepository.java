@@ -9,6 +9,8 @@ import org.springframework.stereotype.Repository;
 
 import com.sl.ms.inventorymanagement.sql.domain.Product;
 
+
+
 @Repository
 public interface ProductsRepository extends CrudRepository<Product, Integer>{
 	
