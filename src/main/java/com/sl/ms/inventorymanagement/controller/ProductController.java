@@ -1,86 +1,226 @@
 package com.sl.ms.inventorymanagement.controller;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.stream.Collectors;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
-import com.sl.ms.inventorymanagement.dao.ProductsRepository;
-import com.sl.ms.inventorymanagement.dto.ProductDetails;
-//import com.sl.ms.inventorymanagement.dto.Product;
-import com.sl.ms.inventorymanagement.sql.domain.Product;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.opencsv.CSVReader;
+import com.sl.ms.inventorymanagement.model.Inventory;
+import com.sl.ms.inventorymanagement.model.Product;
+import com.sl.ms.inventorymanagement.service.InventoryService;
+import com.sl.ms.inventorymanagement.service.ProductService;
+
+
+
 
 @RestController
 public class ProductController {
-
-	ProductsRepository productRepo;
-
-	public ProductController(ProductsRepository productRepo) {
-		this.productRepo = productRepo;
-	}
-
-	@GetMapping("/products")
-	public Iterable<Product> getProducts() {
-		return productRepo.findAll();
-	}
-
-	@GetMapping("/products/{id}")
-	public Product getbyId(@PathVariable int id) {
-		return productRepo.findByProductId(id).get(0);
-	}
-
-	@PostMapping(value = "/products/{id}", consumes = "application/json", produces = "application/json")
-	public Product saveById(@PathVariable int id, @RequestBody Product product) {
-		Product p = new Product(product.getId(), product.getName(), product.getPrice(), product.getQuantity());
-		/*
-		 * p.setName(p.getName()); p.setName(p.getName());
-		 */
-		System.out.print("Name:" + p.getName());
-		return productRepo.save(p);
-	}
-
 	/*
-	 * @PostMapping(value = "/products", consumes = "application/json", produces =
-	 * "application/json") public Iterable<Product> saveAll(@RequestBody
-	 * Iterable<Product> p) { System.out.print("Name:" + p.toString()); return
-	 * productRepo.saveAll(p); }
+	 * GET /products Fetch the list of product inventory in system.
+		GET /products/{product_id} Fetch the specific details of product details by passing product_id
+		POST /products/{product_id} Insert a new inventory for s specific product via Rest end point.
+		POST /products Post data for more than one product at a time.
+		POST /products/file Post data for inventory update as a file. (simple csv)
+		PUT /products/{product_id} Update specific product inventory
+		DELETE /products/{product_id} Delete a specific product from system. (Soft delete, only make product quantity as 0)
+		GET /supported products Fetch the unique list of products supported by system. Return product_id, product_name
 	 */
-	@PostMapping(value = "/products", consumes = "application/json", produces = "application/json")
-	public Iterable<Product> saveAll(@RequestBody ProductDetails productDetails) {
-		List<Product> p = productDetails.getProducts().stream().collect(Collectors.mapping(product -> 
-		new Product(product.getId(),product.getName(),product.getPrice(),product.getQuantity()), Collectors.toList()));
-		System.out.print("Name:" + p.toString());
-		return productRepo.saveAll(p);
+	@Autowired
+	InventoryService invService;
+	@Autowired
+	ProductService proService;
+	
+	private static Logger logger = LoggerFactory.getLogger(ProductController.class);
+	
+//	@Autowired
+//	public Sampler defaultSampler() {
+//		return Sampler.ALWAYS_SAMPLE;
+//	}
+	
+	@GetMapping("/products")
+	private List<Product> getAllProduct(){
+		 logger.info("Into getAllProduct Controller");
+		return proService.getAllProduct();
+		
 	}
-
-	@PutMapping(value = "/products/{id}", consumes = "application/json", produces = "application/json")
-	public Product updateById(@PathVariable int id, @RequestBody Product p) {
-		p.setId(id);
-		System.out.print("Name:" + p.getName());
-		return productRepo.save(p);
+	@GetMapping("/products/{product_id}")
+	private Product getproduct(@PathVariable("product_id") int id) {
+		logger.info("Into getProductbyID Controller");
+		return proService.getById(id);
 	}
-
-	@DeleteMapping(value = "/products/{id}")
-	public void deleteById(@PathVariable int id) {
-		Product p = productRepo.findByProductId(id).get(0);
-		p.setQuantity(0);
-		productRepo.save(p);
+	@GetMapping("/supportedproducts")
+	private List<Product> supportedproducts(){
+		logger.info("Into Supported Product Controller");
+		return proService.supportedproducts();
+		
 	}
+	@PostMapping("/products/{product_id}")
+	private Product saveproduct(@PathVariable("product_id") int id, @RequestBody Product product) {
+		logger.info("Into Post Product Controller");
+		product.setId(id);
+		proService.save(product);
+		return product;
 
-	@GetMapping("/supported_products")
-	public HashMap<Integer, String> getSupportedProducts() {
-		HashMap<Integer, String> uniqueMap = new HashMap<Integer, String>();
-
-		productRepo.findAll().forEach(p -> {
-			uniqueMap.put(p.getId(), p.getName());
-		});
-		return uniqueMap;
 	}
+//	@PostMapping("/product")
+//	private Product saveproduct(@RequestBody Product product) {
+//		proService.save(product);
+//		return product;
+//
+//	}
+	@PostMapping("/products")
+	private List<Product> saveproducts(@RequestBody List<Product> products) {
+		logger.info("Into Post Muti Product Controller");
+		proService.savelist(products);
+		return products;
+
+	}
+	
+	@DeleteMapping("/products/{product_id}")
+	private Product deleteproduct(@PathVariable("product_id") int id) {
+		logger.info("Into Delete Product Controller");
+		Product tt = proService.getById(id);
+		proService.delete(id);
+		return tt;
+	}
+	@PutMapping("/products/{product_id}")
+	private Product updateproduct(@PathVariable("product_id") int id, @RequestBody Product product1) {
+		logger.info("Into Update Product Controller");
+		Product product = proService.getById(id);
+		product.setName(product1.getName());
+		product.setPrice(product1.getPrice());
+		product.setQuantity(product1.getQuantity());
+		proService.save(product);
+		return product;
+		
+	}
+	@GetMapping("/checkproductavail/{product_id}")
+	private boolean checkProductAvail(@PathVariable("product_id") int id){
+		logger.info("Into checkproductavail Controller");
+		return proService.check(id);
+		
+	}
+	//****************************************************************************
+
+	@GetMapping("/inv")
+	private List<Inventory> getInvList()
+	{
+//		Inventory inv = new Inventory();
+//		inv.setDate(LocalDateTime.now());
+//		inv.setSample("sample");
+//		invService.save(inv);
+		List<Inventory> invlist;
+		invlist=invService.getAllInventory();
+		return invlist;
+	}
+	
+	
+	@PostMapping("/products/file")
+	private String uploadMultiFile(@RequestParam("file") MultipartFile[] files) throws IOException  
+	{
+//	System.out.println(files.length+ "    ");
+		logger.info("Into uploadMultiFile Controller no of files ="+files.length);
+	for (int i = 0; i < files.length; i++) {
+		MultipartFile file = files[i];
+
+		Path filePath = Paths.get(System.getProperty("java.io.tmpdir"), file.getOriginalFilename());
+
+		logger.info(filePath.toString());
+		file.transferTo(filePath);
+		readcsv(filePath.toString());
+		File filed = new File(filePath.toString()); 
+		filed.delete();
+	}
+	logger.info("Successfulle uploaded");
+			return "File Uploaded sucessfully";
+	
+	}
+	
+
+	@PostMapping("/upload/csv")
+	private String uploadSingleFile(@RequestParam("file") MultipartFile file) throws IOException 
+	{
+
+		Path filePath = Paths.get(System.getProperty("java.io.tmpdir"), file.getOriginalFilename());
+
+//		System.out.println(filePath);
+		file.transferTo(filePath);
+		logger.info(filePath.toString());
+		readcsv(filePath.toString());
+		logger.info("File Uploaded sucessfully");
+		return "File Uploaded sucessfully";
+	
+	}
+	@SuppressWarnings("deprecation")
+	private  void readcsv(String csvfile) throws  IOException {
+
+		logger.info("InTo CSV Reader");
+		CSVReader reader;
+		try {
+			reader = new CSVReader(new FileReader(csvfile), ',');
+		
+
+		List<Product> prods = new ArrayList<Product>();
+
+		// read line by line
+		String[] record = null;
+		record = reader.readNext();
+//
+		while ((record = reader.readNext()) != null) {
+			Product pro = new Product();
+			pro.setId(Integer.parseInt(record[0]));
+			pro.setName(record[1]);
+			pro.setPrice(Double.parseDouble(record[2]));
+			pro.setQuantity(Integer.parseInt(record[3]));
+			prods.add(pro);
+			logger.info(pro.toString());
+//			proService.save(pro);
+			
+		}
+
+//		System.out.println(prods);
+		proService.savelist(prods);
+		
+		ObjectMapper objectMapper = new ObjectMapper();
+        //Set pretty printing of json
+        objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
+        String arrayToJson = objectMapper.writeValueAsString(prods);
+//        System.out.println("1. Convert List of person objects to JSON :");
+        logger.info(arrayToJson);
+        
+        
+		Inventory inv = new Inventory();
+		inv.setDate(LocalDateTime.now());
+		inv.setSample(arrayToJson);
+		invService.save(inv);
+		
+		
+		reader.close();
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}		
+
 }
